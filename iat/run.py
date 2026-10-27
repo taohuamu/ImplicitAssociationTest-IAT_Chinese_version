@@ -173,11 +173,11 @@ def validate(cfg):
         if not isinstance(tpl, str):
             continue
         try:
-            tpl.format(L='左', R='右', KEY_L='E', KEY_R='I')
+            tpl.format(L='左', R='右', KEY_L='E', KEY_R='I', ERROR_RULE='按错了不用改。')
         except (KeyError, IndexError, ValueError) as e:
             errs.append(
                 "instructions.%s 里的花括号有问题（%s）。可用的占位符只有 "
-                "{L} {R} {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % (key, e))
+                "{L} {R} {KEY_L} {KEY_R} {ERROR_RULE}；正文里要显示花括号请写成 {{ }}。" % (key, e))
 
     timing = cfg.get('timing') or {}
     for key, minval in (('stim_delay', 0.0), ('rt_timeout', 0.0),
@@ -542,7 +542,7 @@ def run_experiment(cfg, code, order, seed):
                 "知情同意书 instructions.consent 里的占位符有误（%s）。\n"
                 "可用的占位符只有 {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % e)
 
-        consent_stim = text(consent_body, height=0.032)
+        consent_stim = text(consent_body, height=0.040)
         # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
         consent_stim.setAutoDraw(True)
         win.flip()
@@ -552,13 +552,19 @@ def run_experiment(cfg, code, order, seed):
         for block in blocks:
             lab = block_labels(cfg, block)
             ltxt, rtxt = block_label_text(lab)
+            # 答错规则由程序按本区块的实际设置生成，避免指导语和真实行为脱节
+            err_mode = err_modes.get(block['no'], err_default)
+            error_rule = ('按错了，屏幕下方会出现红叉，按对的键才能继续。'
+                          if err_mode == 'correct'
+                          else '按错了不用改，直接进入下一个词。')
             try:
-                body = instr[block['instr']].format(L=ltxt, R=rtxt,
-                                                    KEY_L=kl.upper(), KEY_R=kr.upper())
+                body = instr[block['instr']].format(
+                    L=ltxt, R=rtxt, KEY_L=kl.upper(), KEY_R=kr.upper(),
+                    ERROR_RULE=error_rule)
             except (KeyError, IndexError, ValueError) as e:
                 raise SystemExit(
                     "指导语 instructions.%s 里的占位符有误（%s）。\n"
-                    "可用的占位符只有 {L} {R} {KEY_L} {KEY_R}；"
+                    "可用的占位符只有 {L} {R} {KEY_L} {KEY_R} {ERROR_RULE}；"
                     "正文里如果要用花括号，请写成双花括号 {{ }}。"
                     % (block['instr'], e))
 
@@ -570,7 +576,6 @@ def run_experiment(cfg, code, order, seed):
 
             GREEN = [0, 1, 0]
             combined = (block['kind'] == 'combined')
-            err_mode = err_modes.get(block['no'], err_default)
             # 概念标签（白）：单独出现时居上；联合区块时占上方一行
             cl_y = 0.85
             # 属性标签（绿）：单独出现时也居上，便于阅读；联合区块时占下方一行
