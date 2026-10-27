@@ -566,7 +566,7 @@ def run_experiment(cfg, code, order, seed):
                 "知情同意书 instructions.consent 里的占位符有误（%s）。\n"
                 "可用的占位符只有 {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % e)
 
-        consent_stim = text(consent_body, height=0.042)
+        consent_stim = text(consent_body, height=0.052)
         # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
         consent_stim.setAutoDraw(True)
         win.flip()
@@ -578,9 +578,9 @@ def run_experiment(cfg, code, order, seed):
             ltxt, rtxt = block_label_text(lab)
             # 答错规则由程序按本区块的实际设置生成，避免指导语和真实行为脱节
             err_mode = err_modes.get(block['no'], err_default)
-            error_rule = ('按错了，屏幕下方会出现红叉，按对的键才能继续。'
+            error_rule = ('如果按错屏幕下方会出现红叉，按对才能继续。'
                           if err_mode == 'correct'
-                          else '按错了不用改，直接进入下一个词。')
+                          else '如果按错，无需改正，直接进入下一个词。')
             no = block['no']
             fmt = dict(L=ltxt, R=rtxt, KEY_L=kl.upper(), KEY_R=kr.upper(),
                        ERROR_RULE=error_rule,
@@ -596,7 +596,7 @@ def run_experiment(cfg, code, order, seed):
                     "正文里如果要用花括号，请写成双花括号 {{ }}。"
                     % (block['instr'], e))
 
-            instr_stim = text(body, height=0.042)
+            instr_stim = text(body, height=0.048)
             instr_stim.setAutoDraw(True)   # 同上：不能用 draw()
             win.flip()
             wait_keys(('space',), min_time=instr_min)   # 标准 IAT 用空格继续
