@@ -479,47 +479,75 @@ def run_experiment(cfg, code, order, seed):
                 mark.setAutoDraw(False)
                 win.flip()
 
+                # t=0 约等于标签出现的那一帧
                 clock = core.Clock()
                 event.clearEvents()
-                shown = False
+
+                # 刺激"真正"出现于屏幕的时刻。不用标称的 stim_delay——那会带来
+                # 系统偏差；也不用翻转回调——回调在 flip 返回后才执行，会偏晚。
+                # win.flip() 返回 glFinish 记录的真实翻转时刻，但它与 core.getTime()
+                # 同一基准，而 Clock 的基准是绝对单调时钟，必须换算后再相减。
+                onset = {'t': None}
+                try:
+                    _to_clock = (core.monotonicClock.getLastResetTime()
+                                 - clock.getLastResetTime())
+                    _use_flip_time = True
+                except Exception:
+                    _to_clock = 0.0
+                    _use_flip_time = False
+
                 first_key = None
                 rt_first = None
                 rt_correct = None
                 n_err = 0
+                mark_on = False
                 done = False
 
                 while not done:
-                    t = clock.getTime()
-                    if not shown and t >= stim_delay:
-                        stim.setAutoDraw(True)
-                        mark.setAutoDraw(False)
-                        shown = True
-                        win.flip()
-
-                    for k in event.getKeys(keyList=[kl, kr, 'escape']):
+                    # 1) 先取按键。timeStamped 用的是事件时间，不是轮询时刻
+                    for item in event.getKeys(keyList=[kl, kr, 'escape'],
+                                              timeStamped=clock):
+                        if isinstance(item, str):
+                            k, kt = item, clock.getTime()
+                        else:
+                            k, kt = item[0], item[-1]
                         if k == 'escape':
                             raise SystemExit("被试中止（Esc）")
-                        if not shown:
-                            continue
-                        rt = clock.getTime() - stim_delay
-                        correct = (k == correct_key)
+                        if onset['t'] is None or kt < onset['t']:
+                            continue  # 刺激出现之前的按键不予采信
+                        rt = kt - onset['t']
                         if first_key is None:
                             first_key = k
                             rt_first = rt
-                        if correct:
+                        if k == correct_key:
                             rt_correct = rt
                             done = True
                             break  # 本帧后续按键不再计入错误
-                        else:
-                            n_err += 1
-                            mark.setAutoDraw(True)
-                            win.flip()
+                        n_err += 1
+                        mark_on = True
+                    if done:
+                        break
 
-                    if not done:
-                        if rt_timeout > 0 and shown and (clock.getTime() - stim_delay) > rt_timeout:
-                            done = True
+                    # 2) 刺激还没出现：只推进帧，并记录这一帧的真实显示时刻
+                    if onset['t'] is None:
+                        if clock.getTime() >= stim_delay:
+                            stim.setAutoDraw(True)
+                            t_abs = win.flip()
+                            if _use_flip_time and t_abs is not None:
+                                onset['t'] = t_abs + _to_clock
+                            else:
+                                onset['t'] = clock.getTime()
                         else:
                             win.flip()
+                        continue
+
+                    # 3) 刺激已出现：显示红 X、检查超时
+                    if mark_on:
+                        mark.setAutoDraw(True)
+                    if rt_timeout > 0 and (clock.getTime() - onset['t']) > rt_timeout:
+                        done = True
+                        break
+                    win.flip()
 
                 for s in side_labels:
                     s.setAutoDraw(False)

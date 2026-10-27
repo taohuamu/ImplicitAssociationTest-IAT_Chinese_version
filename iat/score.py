@@ -186,7 +186,16 @@ def main():
         if not rows:
             continue
         pid = rows[0].get('participant') or os.path.basename(p).split('_')[0]
-        by_pid.setdefault(pid, []).extend(rows)
+        prev = by_pid.get(pid)
+        if prev is None:
+            by_pid[pid] = rows
+        else:
+            # 同一被试编号出现在多个文件里（重跑、或编号重复），
+            # 不能把两次的数据拼在一起，否则试次会重复、D 值失真
+            keep, drop = (rows, prev) if len(rows) > len(prev) else (prev, rows)
+            print('警告：被试 %s 有多个数据文件，只使用试次较多的那份（%d 行，忽略 %d 行）'
+                  % (pid, len(keep), len(drop)))
+            by_pid[pid] = keep
 
     results = [score_participant(pid, rows) for pid, rows in sorted(by_pid.items())]
 
