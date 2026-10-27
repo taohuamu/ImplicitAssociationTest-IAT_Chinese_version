@@ -111,6 +111,10 @@ python score.py
 
 只改 `config.yaml`。三个地方最常用：
 
+> 不用装编辑器：双击同目录下的 **`edit.cmd`**，会用记事本打开 `config.yaml`。
+> 千万不要用 Word 或 WPS 打开——它们会改掉文件格式，程序就读不了了。
+> 改完保存，再双击 `check.cmd` 确认没写错。
+
 **换概念词**
 
 ```yaml

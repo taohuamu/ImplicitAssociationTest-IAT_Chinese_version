@@ -87,7 +87,8 @@ def load_config(path):
         sys.exit("缺少 PyYAML。请先运行：\n    python -m pip install pyyaml")
     if not os.path.exists(path):
         sys.exit("找不到配置文件：%s" % path)
-    with open(path, 'r', encoding='utf-8') as f:
+    # utf-8-sig 兼容两种情况：记事本保存时可能加上 BOM，也可能不加
+    with open(path, 'r', encoding='utf-8-sig') as f:
         cfg = yaml.safe_load(f)
     if not isinstance(cfg, dict):
         sys.exit("配置文件格式错误：顶层应当是一个映射（key: value）。")
