@@ -634,6 +634,47 @@ def run_experiment(cfg, code, order, seed):
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+def ask_participant_code():
+    """询问被试编号。优先用图形输入框；图形库不可用时退回命令行输入。
+
+    返回 (order, code)；用户取消返回 (None, None)。
+    """
+    try:
+        from psychopy import gui
+        for attempt in range(3):
+            dlg = gui.Dlg(title='IAT 被试信息')
+            dlg.addField('被试编号（T+数字=正顺序，F+数字=反顺序）:', '')
+            dlg.addField('主试姓名（可留空）:', '')
+            res = dlg.show()
+            if not dlg.OK:
+                return None, None
+            try:
+                return parse_code(res[0])
+            except BadCode as e:
+                try:
+                    errdlg = gui.Dlg(title='编号格式错误')
+                    errdlg.addText(str(e).replace('\n', ' '))
+                    errdlg.show()
+                except Exception:
+                    print(e)
+        print("编号连续 3 次不正确。")
+    except Exception as e:
+        print("图形输入框不可用（%s），改用命令行输入。\n" % e)
+
+    for _ in range(3):
+        try:
+            raw = input('被试编号（T 或 F 开头 + 数字，例如 T001）：')
+        except (EOFError, KeyboardInterrupt):
+            return None, None
+        try:
+            return parse_code(raw)
+        except BadCode as e:
+            print(e)
+    print("编号连续 3 次不正确。")
+    return None, None
+
+
 def main():
     # 中文 Windows 的控制台默认是 GBK，遇到 GBK 无法表示的字符会直接抛
     # UnicodeEncodeError 把程序打断。这里退化为替换字符，绝不因输出而崩溃。
@@ -670,28 +711,9 @@ def main():
 
     code = args.code
     if not code:
-        try:
-            from psychopy import gui
-        except ImportError:
-            sys.exit("没有找到 PsychoPy，无法弹出输入框。\n"
-                     "请用 --id 参数指定编号，例如：python run.py --id T001")
-        for attempt in range(3):
-            dlg = gui.Dlg(title='IAT 被试信息')
-            dlg.addField('被试编号（T+数字=正顺序，F+数字=反顺序）:', '')
-            dlg.addField('主试姓名（可留空）:', '')
-            res = dlg.show()
-            if not dlg.OK:
-                sys.exit("已取消。")
-            try:
-                order, code = parse_code(res[0])
-                break
-            except BadCode as e:
-                errdlg = gui.Dlg(title='编号格式错误')
-                errdlg.addText(str(e).replace('\n', ' '))
-                errdlg.show()
-                print(e)
-                if attempt == 2:
-                    sys.exit("编号连续 3 次不正确，已退出。")
+        order, code = ask_participant_code()
+        if code is None:
+            sys.exit("已取消。")
     else:
         try:
             order, code = parse_code(code)
