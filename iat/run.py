@@ -32,6 +32,9 @@ TYPE_NAMES = {T_CONCEPT_1: 'concept_1', T_CONCEPT_2: 'concept_2',
 
 SIDES = ('left', 'right')
 
+# 区块序号的中文写法，供 {SECTION} 占位符使用
+NUM_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+
 # 中文字体候选（按优先级）
 CJK_FONTS_WIN = [('Microsoft YaHei', ('msyh.ttc', 'msyhbd.ttc')),
                  ('SimHei', ('simhei.ttf',))]
@@ -57,6 +60,25 @@ LAYOUTS = {
              plan=[(T_CONCEPT_1, 10), (T_CONCEPT_2, 10), (T_ATTR_1, 10), (T_ATTR_2, 10)]),
         dict(no=5, kind='concept', phase='second', instr='b5', score=False,
              plan=[(T_CONCEPT_1, 20), (T_CONCEPT_2, 20)]),
+        dict(no=6, kind='combined', phase='second', instr='b6', score=True,
+             plan=[(T_CONCEPT_1, 5), (T_CONCEPT_2, 5), (T_ATTR_1, 5), (T_ATTR_2, 5)]),
+        dict(no=7, kind='combined', phase='second', instr='b7', score=True,
+             plan=[(T_CONCEPT_1, 10), (T_CONCEPT_2, 10), (T_ATTR_1, 10), (T_ATTR_2, 10)]),
+    ],
+    # 中科院心理所（蔡华俭研究组）公开的花-虫 IAT 区组设计：
+    # 1 属性词 20 / 2 目标词 20 / 3 联合练习 20 / 4 联合正式 40
+    # 5 相反目标词 20 / 6 相反联合练习 20 / 7 相反联合正式 40，合计 180 试次
+    'cas7': [
+        dict(no=1, kind='attribute', phase='first', instr='b2', score=False,
+             plan=[(T_ATTR_1, 10), (T_ATTR_2, 10)]),
+        dict(no=2, kind='concept', phase='first', instr='b1', score=False,
+             plan=[(T_CONCEPT_1, 10), (T_CONCEPT_2, 10)]),
+        dict(no=3, kind='combined', phase='first', instr='b3', score=True,
+             plan=[(T_CONCEPT_1, 5), (T_CONCEPT_2, 5), (T_ATTR_1, 5), (T_ATTR_2, 5)]),
+        dict(no=4, kind='combined', phase='first', instr='b4', score=True,
+             plan=[(T_CONCEPT_1, 10), (T_CONCEPT_2, 10), (T_ATTR_1, 10), (T_ATTR_2, 10)]),
+        dict(no=5, kind='concept', phase='second', instr='b5', score=False,
+             plan=[(T_CONCEPT_1, 10), (T_CONCEPT_2, 10)]),
         dict(no=6, kind='combined', phase='second', instr='b6', score=True,
              plan=[(T_CONCEPT_1, 5), (T_CONCEPT_2, 5), (T_ATTR_1, 5), (T_ATTR_2, 5)]),
         dict(no=7, kind='combined', phase='second', instr='b7', score=True,
@@ -174,11 +196,12 @@ def validate(cfg):
             continue
         try:
             tpl.format(L='左', R='右', KEY_L='E', KEY_R='I',
-                       ERROR_RULE='按错了不用改。', COMMON='正文')
+                       ERROR_RULE='按错了不用改。', COMMON='正文', SECTION='一')
         except (KeyError, IndexError, ValueError) as e:
             errs.append(
                 "instructions.%s 里的花括号有问题（%s）。可用的占位符只有 "
-                "{L} {R} {KEY_L} {KEY_R} {ERROR_RULE}；正文里要显示花括号请写成 {{ }}。" % (key, e))
+                "{L} {R} {KEY_L} {KEY_R} {ERROR_RULE} {COMMON} {SECTION}；"
+                "正文里要显示花括号请写成 {{ }}。" % (key, e))
 
     timing = cfg.get('timing') or {}
     for key, minval in (('stim_delay', 0.0), ('rt_timeout', 0.0),
@@ -558,8 +581,10 @@ def run_experiment(cfg, code, order, seed):
             error_rule = ('按错了，屏幕下方会出现红叉，按对的键才能继续。'
                           if err_mode == 'correct'
                           else '按错了不用改，直接进入下一个词。')
+            no = block['no']
             fmt = dict(L=ltxt, R=rtxt, KEY_L=kl.upper(), KEY_R=kr.upper(),
-                       ERROR_RULE=error_rule)
+                       ERROR_RULE=error_rule,
+                       SECTION=NUM_CN[no - 1] if 1 <= no <= len(NUM_CN) else str(no))
             try:
                 # 七个说明页共用一段正文，改 instruction_common 即可全部同步
                 fmt['COMMON'] = str(instr.get('instruction_common') or '').format(**fmt)
