@@ -178,7 +178,8 @@ def validate(cfg):
                 "{L} {R} {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % (key, e))
 
     timing = cfg.get('timing') or {}
-    for key, minval in (('stim_delay', 0.0), ('rt_timeout', 0.0)):
+    for key, minval in (('stim_delay', 0.0), ('rt_timeout', 0.0),
+                        ('consent_min_time', 0.0), ('instruction_min_time', 0.0)):
         val = timing.get(key, 0)
         try:
             val = float(val)
@@ -438,13 +439,25 @@ def run_experiment(cfg, code, order, seed):
                                color=color, wrapWidth=wrap, units='norm',
                                colorSpace='rgb')
 
-    def wait_keys(accepted, label):
+    def wait_keys(accepted, min_time=0.0):
+        """等待 accepted 里的任意键。min_time 秒内的按键一律丢弃，防止连按跳过。"""
         event.clearEvents()
+        key_clock = core.Clock()
         while True:
             pressed = event.getKeys(keyList=list(accepted) + ['escape'])
             if 'escape' in pressed:
                 raise SystemExit("被试中止（Esc）")
-            if pressed:
+            if pressed and key_clock.getTime() >= min_time:
+                return pressed[0]
+            win.flip()
+
+    def wait_any_key(min_time=0.0):
+        """等待任意键（致谢页用）。"""
+        event.clearEvents()
+        key_clock = core.Clock()
+        while True:
+            pressed = event.getKeys()
+            if pressed and key_clock.getTime() >= min_time:
                 return pressed[0]
             win.flip()
 
@@ -468,10 +481,16 @@ def run_experiment(cfg, code, order, seed):
     fh.flush()
 
     # ---------------- 知情同意 ----------------
+    consent_min = float(timing.get('consent_min_time', 3.0) or 0)
+    instr_min = float(timing.get('instruction_min_time', 1.5) or 0)
+
     try:
-        text(instr['consent'], height=0.042).draw()
+        consent_stim = text(instr['consent'], height=0.032)
+        # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
+        consent_stim.setAutoDraw(True)
         win.flip()
-        wait_keys(('space',), 'consent')
+        wait_keys(('space',), min_time=consent_min)
+        consent_stim.setAutoDraw(False)
 
         for block in blocks:
             lab = block_labels(cfg, block)
@@ -487,9 +506,10 @@ def run_experiment(cfg, code, order, seed):
                     % (block['instr'], e))
 
             instr_stim = text(body, height=0.042)
-            instr_stim.draw()
+            instr_stim.setAutoDraw(True)   # 同上：不能用 draw()
             win.flip()
-            wait_keys((kl, kr), 'instruction')
+            wait_keys((kl, kr), min_time=instr_min)
+            instr_stim.setAutoDraw(False)
 
             GREEN = [0, 1, 0]
             combined = (block['kind'] == 'combined')
@@ -622,11 +642,14 @@ def run_experiment(cfg, code, order, seed):
             fh.close()
 
     # ---------------- 致谢 ----------------
-    text(instr['thanks'], height=0.06).draw()
+    thanks_stim = text(instr['thanks'], height=0.06)
+    thanks_stim.setAutoDraw(True)
     win.flip()
-    core.wait(3)
+    core.wait(2.0)
     event.clearEvents()
-    wait_keys((kl, kr, 'space', 'return'), 'thanks')
+    wait_any_key(min_time=0.3)     # 文案写的是"按任意键"，就真的接受任意键
+    thanks_stim.setAutoDraw(False)
+    win.flip()
     win.close()
 
     print("数据已保存：%s.csv" % stem)
