@@ -509,6 +509,7 @@ def run_experiment(cfg, code, order, seed):
                         if correct:
                             rt_correct = rt
                             done = True
+                            break  # 本帧后续按键不再计入错误
                         else:
                             n_err += 1
                             mark.setAutoDraw(True)

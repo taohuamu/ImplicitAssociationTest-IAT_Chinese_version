@@ -11,7 +11,7 @@
 
 | 项 | 原版 | 本版 |
 |---|---|---|
-| 运行环境 | Python 2，现代 PsychoPy 打不开 | Python 3，PsychoPy 2021.2 以上均可 |
+| 运行环境 | Python 2，现代 PsychoPy 打不开 | Python 3.10–3.12，PsychoPy 2021 之后的版本 |
 | 改实验材料 | 改 3 个 xlsx，左右位置靠约定 | 改 `config.yaml`，程序启动时校验 |
 | 中文显示 | 字体写死 Arial，中文变方框 | 自动选系统中文字体 |
 | 试次平衡 | 每个类别必须正好 5 个例子 | 任意数量，自动平衡 |
@@ -23,9 +23,21 @@
 
 ## 二、装环境
 
-任选一种。
+> **本机已完成配置，可以直接用。**
+> 便携式 Python 3.11.9 + PsychoPy 2026.2.5，装在
+> `C:\Users\mahogany\.workbuddy\binaries\python\versions\3.11.9\`
+> 不污染系统 Python，也不改 PATH。
+>
+> 直接双击 `run.cmd`，或在命令行里：
+> ```
+> run.cmd --check-only
+> run.cmd --id T001
+> ```
+> `run.cmd` 里写死了上面那个路径；如果哪天路径变了，它会自动退回用 PATH 上的 `python`。
 
-### 方案 A：PsychoPy 独立版（推荐）
+以下是从零安装的两种方式，换机器时看。
+
+### 方案 A：PsychoPy 独立版（实验室最省事）
 
 从 <https://www.psychopy.org/download.html> 下载 Windows 版安装包，一路默认安装即可。
 它自带 Python 3.12 和所有依赖，不用另外装东西。
@@ -218,3 +230,8 @@ D1 算法：剔除 rt > 10000ms 的试次；错误试次用改正后的正确反
 
 **想改成 Greenwald(1998) 五部分布局**
 把 `experiment.layout` 改成 `greenwald5`，试次变成 140，其余不变。
+
+**启动时报 `the environment variable is longer than 32767 characters`**
+这是 PsychoPy 初始化时往环境变量里塞第三方包路径导致的，Windows 单变量上限 32767 字符。
+本项目的 `run.cmd` 里已经设了 `PSYCHOPYNOPACKAGES=1` 规避。
+如果用别的方式启动，自己加这个环境变量，或者在 Python 里 `os.environ['PSYCHOPYNOPACKAGES']='1'` 后再 import psychopy。
