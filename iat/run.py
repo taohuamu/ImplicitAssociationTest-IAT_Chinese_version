@@ -155,8 +155,9 @@ def validate(cfg):
     for c in concepts:
         if c['side'] not in attr_sides:
             errs.append(
-                "概念「%s」在 %s 侧，但两个属性分别在 left / right …… 没有属性与它同侧。"
-                "请检查 concepts 与 attributes 的 side 设置。" % (c['name'], c['side']))
+                "概念「%s」在 %s 侧，但没有属性也在这一侧，构不成相容配对。"
+                "请检查 concepts 与 attributes 的 side 设置。"
+                % (c['name'], '左' if c['side'] == 'left' else '右'))
 
     instr = cfg.get('instructions') or {}
     need = ['consent', 'thanks'] + [b['instr'] for b in LAYOUTS[layout]]
@@ -257,10 +258,6 @@ def _concept_sides(cfg, order, phase):
 def _attr_sides(cfg):
     return {T_ATTR_1: cfg['attributes'][0]['side'],
             T_ATTR_2: cfg['attributes'][1]['side']}
-
-
-def _side_of(ttype, c_sides, a_sides):
-    return c_sides[ttype] if ttype in c_sides else a_sides[ttype]
 
 
 def _exemplars_of(cfg, ttype):
@@ -444,7 +441,9 @@ def pick_cjk_font(preferred):
 
 def run_experiment(cfg, code, order, seed):
     try:
-        from psychopy import core, event, gui, visual
+        # 注意：这里不导入 gui。实验本身不需要图形工具包，
+        # 少了 Qt/wx 也不该让施测起不来（gui 只在询问编号时用，且那边有回退）。
+        from psychopy import core, event, visual
     except ImportError:
         sys.exit("没有找到 PsychoPy。\n"
                  "请用 PsychoPy 官方独立版运行本脚本，或执行：\n"
@@ -624,7 +623,13 @@ def run_experiment(cfg, code, order, seed):
                         if isinstance(item, str):
                             k, kt = item, clock.getTime()
                         else:
-                            k, kt = item[0], item[-1]
+                            k = item[0]
+                            kt = item[-1]
+                            # PsychoPy 组装返回值时会把假值过滤掉，
+                            # 时间戳恰为 0.0 时元组会退化成 (键名,)，
+                            # 此时 item[-1] 是字符串，兜一下避免后面比较时报错
+                            if not isinstance(kt, (int, float)):
+                                kt = clock.getTime()
                         if k == 'escape':
                             raise SystemExit("被试中止（Esc）")
                         if onset['t'] is None or kt < onset['t']:
