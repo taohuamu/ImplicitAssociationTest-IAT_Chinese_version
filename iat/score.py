@@ -33,6 +33,8 @@ RT_MAX = 10000.0      # ms，超过则剔除该试次
 FAST_RT = 300.0       # ms，低于此为"快速试次"
 FAST_PCT_LIMIT = 0.10  # 快速试次比例上限
 ACC_LIMIT = 0.80      # 正确率下限（即错误率上限 20%）
+ERROR_PENALTY = 600.0  # ms，advance 模式下给错误试次加的时间惩罚
+                       # （Greenwald et al., 2003 的 D 算法：错误试次用区块均值 + 600ms）
 
 # 用来识别"这确实是一份 IAT 数据文件"，避免把目录里别的 csv 也读进来
 REQUIRED_COLS = {'participant', 'order', 'layout', 'block', 'block_kind',
@@ -77,11 +79,33 @@ def score_participant(pid, rows):
     acc = (n_correct / n_total) if n_total else float('nan')
     pct_fast = (n_fast / len(rt_all)) if rt_all else float('nan')
 
+    # 错误试次的惩罚：仅用于 advance 模式（答错直接过、反应时是"错按"的那一下）。
+    # 若用 correct 模式（强制改正），rt_correct 本身已包含改正时间，不再加惩罚。
+    block_means = {}
+    tmp = {}
+    for r in combined:
+        if str(r.get('first_key_correct')) != '1':
+            continue
+        v = _rt_ms(r.get('rt_correct'))
+        if v is not None and v <= RT_MAX:
+            tmp.setdefault(r.get('block'), []).append(v)
+    block_means = {k: st.mean(v) for k, v in tmp.items() if v}
+
+    def scoring_rt(r):
+        rt = _rt_ms(r.get('rt_correct'))
+        if rt is None:
+            return None
+        mode = (r.get('error_mode') or 'correct').lower()
+        if mode == 'advance' and str(r.get('first_key_correct')) == '0':
+            base = block_means.get(r.get('block'))
+            return (base if base is not None else rt) + ERROR_PENALTY
+        return rt
+
     # 按 (配对, 区块长度) 归组
     cells = {}
     for r in combined:
-        rt = _rt_ms(r.get('rt_correct'))
-        if rt is None or rt > RT_MAX:
+        rt = scoring_rt(r)
+        if rt is None or rt > RT_MAX + ERROR_PENALTY:
             continue
         key = (r['pairing'], int(r['block_trials']))
         cells.setdefault(key, []).append(rt)

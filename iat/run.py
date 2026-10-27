@@ -190,6 +190,25 @@ def validate(cfg):
         if val < minval:
             errs.append("timing.%s 不能小于 %g，当前为 %g" % (key, minval, val))
 
+    eh = cfg.get('error_handling') or {}
+    valid_blocks = {b['no'] for b in LAYOUTS[layout]}
+    for k, v in eh.items():
+        if str(k) == 'default':
+            if str(v).lower() not in ('correct', 'advance'):
+                errs.append("error_handling.default 只能是 correct 或 advance，当前为 %r" % v)
+            continue
+        try:
+            num = int(k)
+        except (TypeError, ValueError):
+            errs.append("error_handling 的键必须是区块号或 default，当前为 %r" % k)
+            continue
+        if num not in valid_blocks:
+            errs.append("error_handling 里的区块 %d 不存在（%s 布局只有区块 %s）"
+                        % (num, layout, sorted(valid_blocks)))
+        if str(v).lower() not in ('correct', 'advance'):
+            errs.append("error_handling 区块 %d 只能是 correct 或 advance，当前为 %r"
+                        % (num, v))
+
     # 类别名不能与刺激词重名，否则指导语与试次判断会混淆
     names = {c.get('name') for c in concepts} | {a.get('name') for a in attributes}
     if len(names) != 4:
@@ -377,6 +396,23 @@ def run_check(cfg, order):
         print("  [OK] 所有区块内各刺激呈现次数相差不超过 1")
 
     print()
+    print("答错处理：")
+    eh_raw = cfg.get('error_handling') or {}
+    eh_default = str(eh_raw.get('default', 'correct')).lower()
+    eh_map = {}
+    for k, v in eh_raw.items():
+        if str(k) == 'default':
+            continue
+        try:
+            eh_map[int(k)] = str(v).lower()
+        except (TypeError, ValueError):
+            pass
+    for b in blocks:
+        mode = eh_map.get(b['no'], eh_default)
+        desc = '显示红 X，必须按对键才能继续' if mode == 'correct' else '不显示反馈，答错直接进入下一试次'
+        print("  区块 %d：%s —— %s" % (b['no'], mode, desc))
+
+    print()
     print("计分区块配对：")
     for b in blocks:
         if b['score']:
@@ -473,7 +509,7 @@ def run_experiment(cfg, code, order, seed):
                   f, ensure_ascii=False, indent=2)
 
     fields = ['participant', 'order', 'layout', 'block', 'block_kind', 'pairing',
-              'block_trials', 'trial_in_block', 'trial_type', 'stimulus',
+              'error_mode', 'block_trials', 'trial_in_block', 'trial_type', 'stimulus',
               'stim_side', 'correct_key', 'first_key', 'first_key_correct',
               'rt_first', 'rt_correct', 'n_errors', 'timestamp']
     fh = open(stem + '.csv', 'w', encoding='utf-8-sig', newline='')
@@ -484,6 +520,18 @@ def run_experiment(cfg, code, order, seed):
     # ---------------- 知情同意 ----------------
     consent_min = float(timing.get('consent_min_time', 3.0) or 0)
     instr_min = float(timing.get('instruction_min_time', 1.5) or 0)
+
+    # 答错处理方式：correct = 显示红 X 并强制改正；advance = 直接进入下一试次
+    eh_raw = cfg.get('error_handling') or {}
+    err_default = str(eh_raw.get('default', 'correct')).lower()
+    err_modes = {}
+    for k, v in eh_raw.items():
+        if str(k) == 'default':
+            continue
+        try:
+            err_modes[int(k)] = str(v).lower()
+        except (TypeError, ValueError):
+            pass
 
     try:
         consent_stim = text(instr['consent'], height=0.032)
@@ -514,6 +562,7 @@ def run_experiment(cfg, code, order, seed):
 
             GREEN = [0, 1, 0]
             combined = (block['kind'] == 'combined')
+            err_mode = err_modes.get(block['no'], err_default)
             # 概念标签（白）：单独出现时居上；联合区块时占上方一行
             cl_y = 0.85
             # 属性标签（绿）：单独出现时也居上，便于阅读；联合区块时占下方一行
@@ -589,6 +638,11 @@ def run_experiment(cfg, code, order, seed):
                             done = True
                             break  # 本帧后续按键不再计入错误
                         n_err += 1
+                        if err_mode == 'advance':
+                            # 不显示任何反馈，答错也直接进入下一试次
+                            rt_correct = rt
+                            done = True
+                            break
                         mark_on = True
                     if done:
                         break
@@ -623,7 +677,7 @@ def run_experiment(cfg, code, order, seed):
                 writer.writerow(dict(
                     participant=code, order=order, layout=exp.get('layout', 'nosek7'),
                     block=block['no'], block_kind=block['kind'], pairing=block['pairing'],
-                    block_trials=block['n_trials'], trial_in_block=i,
+                    error_mode=err_mode, block_trials=block['n_trials'], trial_in_block=i,
                     trial_type=TYPE_NAMES[trial['type']], stimulus=trial['word'],
                     stim_side=trial['side'], correct_key=correct_key,
                     first_key=first_key or '',
