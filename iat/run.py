@@ -163,6 +163,42 @@ def validate(cfg):
         if not instr.get(key):
             errs.append("instructions.%s 缺失或为空" % key)
 
+    # 区块指导语会被 .format() 填充，花括号写错要到正式施测才炸，
+    # 所以在这里先用假值试一遍，提前发现
+    for spec in LAYOUTS[layout]:
+        key = spec['instr']
+        tpl = instr.get(key)
+        if not isinstance(tpl, str):
+            continue
+        try:
+            tpl.format(L='左', R='右', KEY_L='E', KEY_R='I')
+        except (KeyError, IndexError, ValueError) as e:
+            errs.append(
+                "instructions.%s 里的花括号有问题（%s）。可用的占位符只有 "
+                "{L} {R} {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % (key, e))
+
+    timing = cfg.get('timing') or {}
+    for key, minval in (('stim_delay', 0.0), ('rt_timeout', 0.0)):
+        val = timing.get(key, 0)
+        try:
+            val = float(val)
+        except (TypeError, ValueError):
+            errs.append("timing.%s 必须是数字，当前为 %r" % (key, val))
+            continue
+        if val < minval:
+            errs.append("timing.%s 不能小于 %g，当前为 %g" % (key, minval, val))
+
+    # 类别名不能与刺激词重名，否则指导语与试次判断会混淆
+    names = {c.get('name') for c in concepts} | {a.get('name') for a in attributes}
+    if len(names) != 4:
+        errs.append("概念词与属性词的名字必须两两不同（现在有重名）")
+    words = {str(w) for grp in (concepts, attributes) for item in grp
+             for w in (item.get('exemplars') or [])}
+    both = names & words
+    if both:
+        errs.append("类别名与刺激词重名：%s。请换一个类别名，否则界面会混淆。"
+                    % '、'.join(sorted(both)))
+
     return errs
 
 
@@ -333,10 +369,10 @@ def run_check(cfg, order):
         for ttype, lst in per_type.items():
             if max(lst) - min(lst) > 1:
                 ok = False
-                print("  ✗ 区块 %d 类型 %s 分布不均：%s"
+                print("  [!!] 区块 %d 类型 %s 分布不均：%s"
                       % (b['no'], TYPE_NAMES[ttype], sorted(lst)))
     if ok:
-        print("  ✓ 所有区块内各刺激呈现次数相差不超过 1")
+        print("  [OK] 所有区块内各刺激呈现次数相差不超过 1")
 
     print()
     print("计分区块配对：")
@@ -393,7 +429,8 @@ def run_experiment(cfg, code, order, seed):
         size=tuple(win_cfg.get('size', [1366, 768])),
         fullscr=bool(win_cfg.get('fullscreen', True)),
         color=win_cfg.get('background', 'black'),
-        colorSpace='rgb', units='norm', allowGUI=False, screen=0)
+        colorSpace='rgb', units='norm', allowGUI=False,
+        screen=int(win_cfg.get('screen', 0)))
     win.mouseVisible = False
 
     def text(msg, height=0.05, color='white', pos=(0, 0), wrap=1.6):
@@ -439,8 +476,15 @@ def run_experiment(cfg, code, order, seed):
         for block in blocks:
             lab = block_labels(cfg, block)
             ltxt, rtxt = block_label_text(lab)
-            body = instr[block['instr']].format(L=ltxt, R=rtxt,
-                                                KEY_L=kl.upper(), KEY_R=kr.upper())
+            try:
+                body = instr[block['instr']].format(L=ltxt, R=rtxt,
+                                                    KEY_L=kl.upper(), KEY_R=kr.upper())
+            except (KeyError, IndexError, ValueError) as e:
+                raise SystemExit(
+                    "指导语 instructions.%s 里的占位符有误（%s）。\n"
+                    "可用的占位符只有 {L} {R} {KEY_L} {KEY_R}；"
+                    "正文里如果要用花括号，请写成双花括号 {{ }}。"
+                    % (block['instr'], e))
 
             instr_stim = text(body, height=0.042)
             instr_stim.draw()
@@ -591,6 +635,14 @@ def run_experiment(cfg, code, order, seed):
 
 # ---------------------------------------------------------------------------
 def main():
+    # 中文 Windows 的控制台默认是 GBK，遇到 GBK 无法表示的字符会直接抛
+    # UnicodeEncodeError 把程序打断。这里退化为替换字符，绝不因输出而崩溃。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='replace')
+        except Exception:
+            pass
+
     ap = argparse.ArgumentParser(description='IAT 中文版')
     ap.add_argument('--config', default=os.path.join(BASE_DIR, 'config.yaml'))
     ap.add_argument('--id', dest='code', help='被试编号，T+数字 或 F+数字')

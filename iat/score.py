@@ -34,6 +34,12 @@ FAST_RT = 300.0       # ms，低于此为"快速试次"
 FAST_PCT_LIMIT = 0.10  # 快速试次比例上限
 ACC_LIMIT = 0.80      # 正确率下限（即错误率上限 20%）
 
+# 用来识别"这确实是一份 IAT 数据文件"，避免把目录里别的 csv 也读进来
+REQUIRED_COLS = {'participant', 'order', 'layout', 'block', 'block_kind',
+                 'pairing', 'block_trials', 'trial_in_block', 'trial_type',
+                 'stimulus', 'correct_key', 'first_key', 'first_key_correct',
+                 'rt_correct', 'n_errors'}
+
 
 def load_rows(paths):
     rows = []
@@ -171,11 +177,16 @@ def main():
     ap.add_argument('--out', default=None)
     args = ap.parse_args()
 
+    out = args.out or os.path.join(args.data, 'processed.csv')
+    out_abs = os.path.abspath(out)
+
     if args.files:
-        paths = args.files
+        paths = list(args.files)
     else:
         paths = sorted(glob.glob(os.path.join(args.data, '*.csv')))
-        paths = [p for p in paths if not os.path.basename(p).startswith('processed')]
+    # 别把自己上一次的输出当成输入
+    paths = [p for p in paths if os.path.abspath(p) != out_abs
+             and not os.path.basename(p).startswith('processed')]
 
     if not paths:
         sys.exit('没有找到数据文件（%s 下没有 csv）。' % args.data)
@@ -184,6 +195,11 @@ def main():
     for p in paths:
         rows = load_rows([p])
         if not rows:
+            continue
+        missing = REQUIRED_COLS - set(rows[0].keys())
+        if missing:
+            print('跳过 %s：不是 IAT 数据文件（缺少列 %s）'
+                  % (os.path.basename(p), '、'.join(sorted(missing))))
             continue
         pid = rows[0].get('participant') or os.path.basename(p).split('_')[0]
         prev = by_pid.get(pid)
@@ -199,7 +215,6 @@ def main():
 
     results = [score_participant(pid, rows) for pid, rows in sorted(by_pid.items())]
 
-    out = args.out or os.path.join(args.data, 'processed.csv')
     fields = ['participant', 'order', 'layout', 'n_test_trials', 'accuracy', 'pct_fast',
               'mean_rt_compatible', 'mean_rt_incompatible', 'D1', 'D1a', 'D1b',
               'D_variant', 'D_1998_log', 'exclude', 'exclude_reason', 'note']

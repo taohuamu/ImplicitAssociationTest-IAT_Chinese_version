@@ -147,6 +147,10 @@ attributes:
 3. 每个概念的 `side` 必须与某个属性相同（否则不存在相容配对）
 4. `keys.left` 与 `keys.right` 不能相同，且都是单字符
 5. 同一类别的 `exemplars` 不能重复、不能为空
+6. 四个名字（两个概念 + 两个属性）必须两两不同，且不能和刺激词重名
+7. `timing.stim_delay` 与 `rt_timeout` 必须是非负数
+8. 指导语里只能用 `{L}` `{R}` `{KEY_L}` `{KEY_R}` 四个占位符；
+   正文要显示花括号得写成 `{{ }}`，否则启动时就报错
 
 ---
 
@@ -266,3 +270,8 @@ D1 算法：剔除 rt > 10000ms 的试次；错误试次用改正后的正确反
 这是 PsychoPy 初始化时往环境变量里塞第三方包路径导致的，Windows 单变量上限 32767 字符。
 本项目的 `run.cmd` 里已经设了 `PSYCHOPYNOPACKAGES=1` 规避。
 如果用别的方式启动，自己加这个环境变量，或者在 Python 里 `os.environ['PSYCHOPYNOPACKAGES']='1'` 后再 import psychopy。
+
+**命令行输出中文是乱码或报 `UnicodeEncodeError`**
+中文 Windows 控制台默认 GBK，`run.cmd` 里已经 `chcp 65001` 切到 UTF-8。
+如果直接 `python run.py` 看到乱码，多半是终端编码问题，不影响数据；程序本身已做保护，
+不会再因输出字符编码而崩溃。
