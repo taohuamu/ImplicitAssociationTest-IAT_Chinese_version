@@ -160,7 +160,7 @@ def validate(cfg):
                 % (c['name'], '左' if c['side'] == 'left' else '右'))
 
     instr = cfg.get('instructions') or {}
-    need = ['consent', 'thanks'] + [b['instr'] for b in LAYOUTS[layout]]
+    need = ['consent', 'thanks', 'instruction_common'] + [b['instr'] for b in LAYOUTS[layout]]
     for key in need:
         if not instr.get(key):
             errs.append("instructions.%s 缺失或为空" % key)
@@ -168,12 +168,13 @@ def validate(cfg):
     # 指导语会被 .format() 填充，花括号写错要到正式施测才炸，
     # 所以在这里先用假值试一遍，提前发现。同意页与致谢页同样要检查——
     # 同意页漏做替换时被试会直接看到 {KEY_L} 这样的原始占位符。
-    for key in ['consent', 'thanks'] + [spec['instr'] for spec in LAYOUTS[layout]]:
+    for key in ['consent', 'thanks', 'instruction_common'] + [spec['instr'] for spec in LAYOUTS[layout]]:
         tpl = instr.get(key)
         if not isinstance(tpl, str):
             continue
         try:
-            tpl.format(L='左', R='右', KEY_L='E', KEY_R='I', ERROR_RULE='按错了不用改。')
+            tpl.format(L='左', R='右', KEY_L='E', KEY_R='I',
+                       ERROR_RULE='按错了不用改。', COMMON='正文')
         except (KeyError, IndexError, ValueError) as e:
             errs.append(
                 "instructions.%s 里的花括号有问题（%s）。可用的占位符只有 "
@@ -542,7 +543,7 @@ def run_experiment(cfg, code, order, seed):
                 "知情同意书 instructions.consent 里的占位符有误（%s）。\n"
                 "可用的占位符只有 {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % e)
 
-        consent_stim = text(consent_body, height=0.040)
+        consent_stim = text(consent_body, height=0.036)
         # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
         consent_stim.setAutoDraw(True)
         win.flip()
@@ -557,10 +558,12 @@ def run_experiment(cfg, code, order, seed):
             error_rule = ('按错了，屏幕下方会出现红叉，按对的键才能继续。'
                           if err_mode == 'correct'
                           else '按错了不用改，直接进入下一个词。')
+            fmt = dict(L=ltxt, R=rtxt, KEY_L=kl.upper(), KEY_R=kr.upper(),
+                       ERROR_RULE=error_rule)
             try:
-                body = instr[block['instr']].format(
-                    L=ltxt, R=rtxt, KEY_L=kl.upper(), KEY_R=kr.upper(),
-                    ERROR_RULE=error_rule)
+                # 七个说明页共用一段正文，改 instruction_common 即可全部同步
+                fmt['COMMON'] = str(instr.get('instruction_common') or '').format(**fmt)
+                body = instr[block['instr']].format(**fmt)
             except (KeyError, IndexError, ValueError) as e:
                 raise SystemExit(
                     "指导语 instructions.%s 里的占位符有误（%s）。\n"
@@ -571,7 +574,7 @@ def run_experiment(cfg, code, order, seed):
             instr_stim = text(body, height=0.042)
             instr_stim.setAutoDraw(True)   # 同上：不能用 draw()
             win.flip()
-            wait_keys((kl, kr), min_time=instr_min)
+            wait_keys(('space',), min_time=instr_min)   # 标准 IAT 用空格继续
             instr_stim.setAutoDraw(False)
 
             GREEN = [0, 1, 0]
