@@ -1,31 +1,11 @@
-# -*- coding: utf-8 -*-
 """
-IAT 计分 —— 严格按 Greenwald, Nosek & Banaji (2003) 的改进算法（Table 4）。
+IAT 计分（Greenwald, Nosek & Banaji, 2003, Table 4）。
 
-Table 4 的 12 步对应到本文件：
-
-  1. 只用区块 3、4、6、7                        -> combined
-  2. 剔除反应时 > 10000ms 的试次；               -> rt_max
-     剔除「>10% 试次快于 300ms」的被试           -> fast_rt / fast_pct_limit
-  3. 保留区块内全部试次（不丢前两个）              -> 无操作
-  4. 默认不做极端值处理                           -> delete_below_400 可开
-  5. 逐区块算「正确试次」的均值与标准差            -> block_mean / block_sd
-  6. 3&6 一个合并 SD、4&7 一个合并 SD，
-     且只用正确试次计算                           -> pair_sd
-  7. 错误试次替换：
-       强制改正 -> 直接用改对后的反应时（原文允许的替代做法）
-       不改正   -> 该区块正确均值 + 600ms
-                                                 -> scoring_rt()
-  8. 不做变换                                     -> 无操作
-  9. 各区块取均值                                 -> block_mean_scoring
- 10. 两个差值（6-3、7-4）                         -> d_pair
- 11. 各自除以第 6 步的 SD                         -> d_pair
- 12. 两个商取平均                                 -> D
-
-用法：
     python score.py                 # 扫 data/ 目录
     python score.py 某文件.csv
     python score.py --error-rate-exclude 0.2 --delete-below-400
+
+12 步算法与各参数含义见 README「计分算法」一节。
 """
 import argparse
 import csv
@@ -39,14 +19,15 @@ import yaml
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 默认参数，对应 Greenwald et al. (2003) Table 4 的"改进算法"一列
+__version__ = '2.1.0'
+
 DEFAULTS = {
-    'rt_max': 10000.0,          # 剔除慢于该值的试次
-    'fast_rt': 300.0,           # 「快速试次」阈值
-    'fast_pct_limit': 0.10,     # 快速试次比例超过此值则剔除被试
-    'error_rate_exclude': None,  # None = 不按错误率剔除（2003 改进算法没有这条）
-    'delete_below_400': False,  # 对应 D2/D6 变体：删除 <400ms 的试次
-    'error_penalty': 600.0,     # 错误试次惩罚（advance 模式用）
+    'rt_max': 10000.0,
+    'fast_rt': 300.0,
+    'fast_pct_limit': 0.10,
+    'error_rate_exclude': None,
+    'delete_below_400': False,
+    'error_penalty': 600.0,
 }
 
 REQUIRED_COLS = {'participant', 'order', 'layout', 'block', 'block_kind',
@@ -117,7 +98,6 @@ def score_participant(pid, rows, opt):
     order = rows[0].get('order', '') if rows else ''
     layout = rows[0].get('layout', '') if rows else ''
 
-    # ---- 第 2 步：剔除 > 10000ms；统计快速试次比例 ----
     n_total = len(combined)
     n_correct = sum(1 for r in combined if str(r.get('first_key_correct')) == '1')
     acc = (n_correct / n_total) if n_total else float('nan')
@@ -129,15 +109,13 @@ def score_participant(pid, rows, opt):
             continue
         ok_rows.append((r, rt))
 
-    rts_for_fast = [rt for _, rt in ok_rows]          # 快速试次统计用全部试次
+    rts_for_fast = [rt for _, rt in ok_rows]
     n_fast = sum(1 for x in rts_for_fast if x < fast_rt)
     pct_fast = (n_fast / len(rts_for_fast)) if rts_for_fast else float('nan')
 
-    # ---- 第 4 步（可选）：删除 < 400ms（D2/D6 变体） ----
     if drop_fast_400:
         ok_rows = [(r, rt) for r, rt in ok_rows if rt >= 400.0]
 
-    # ---- 第 5 步：逐区块算正确试次的均值与 SD ----
     by_block = {}
     for r, rt in ok_rows:
         by_block.setdefault(r['block'], []).append((r, rt))
@@ -150,16 +128,13 @@ def score_participant(pid, rows, opt):
             block_mean_c[b] = st.mean(cs)
             block_sd_c[b] = st.stdev(cs) if len(cs) > 1 else 0.0
 
-    # ---- 第 7 步：错误试次的替换值 ----
     def scoring_rt(r, rt):
         if str(r.get('first_key_correct')) == '1':
             return rt
         mode = (r.get('error_mode') or 'correct').lower()
         if mode == 'advance':
-            # 不改正：该区块正确均值 + 惩罚
             base = block_mean_c.get(r['block'])
             return (base if base is not None else rt) + penalty
-        # 强制改正：rt_correct 本身已是"改对后"的时间，含天然惩罚，不再加
         return rt
 
     block_scoring = {}
@@ -169,7 +144,6 @@ def score_participant(pid, rows, opt):
         block_correct_rts[b] = [rt for r, rt in items
                                 if str(r.get('first_key_correct')) == '1']
 
-    # ---- 第 9~12 步：按区块长度配对，各算一个 D，再平均 ----
     by_size = {}
     for b, items in by_block.items():
         size = int(items[0][0]['block_trials'])
@@ -183,7 +157,6 @@ def score_participant(pid, rows, opt):
         b_inc = pair.get('incompatible')
         if not b_comp or not b_inc:
             continue
-        # 第 6 步：合并 SD，只用正确试次
         sd_pool = block_correct_rts[b_comp] + block_correct_rts[b_inc]
         if len(sd_pool) < 2:
             continue
@@ -208,7 +181,6 @@ def score_participant(pid, rows, opt):
         variant = 'D1(单段SD)'
         note = '只有一组可配对的区块，无法按两段平均'
     else:
-        # 区块长度对不上（例如 greenwald5），退化为全体合并 SD
         all_c = [x for b in block_correct_rts for x in block_correct_rts[b]]
         sc_comp = [x for b in by_block if by_block[b][0][0]['pairing'] == 'compatible'
                    for x in block_scoring[b]]
@@ -234,7 +206,6 @@ def score_participant(pid, rows, opt):
                      for x in block_scoring[b]]) \
         if any(by_block[b][0][0]['pairing'] == 'incompatible' for b in by_block) else float('nan')
 
-    # ---- Greenwald(1998) 对数法，仅作参考 ----
     def clamp_log(vals):
         return [math.log(min(max(v, 300.0), 3000.0)) for v in vals]
 
@@ -246,7 +217,6 @@ def score_participant(pid, rows, opt):
     if comp_all and inc_all:
         d1998 = st.mean(clamp_log(inc_all)) - st.mean(clamp_log(comp_all))
 
-    # ---- 剔除判断 ----
     reasons = []
     if n_total == 0:
         reasons.append('没有联合区块数据')

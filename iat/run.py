@@ -1,17 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-内隐联想测验（IAT）中文版 · 配置驱动实现
+内隐联想测验（IAT）中文版。
 
-用法：
-    python run.py --check-only          只校验配置、打印试次分配，不弹窗口
-    python run.py --id T001             正式施测（编号必填，或启动后弹框填）
-    python run.py --id T001 --seed 42   固定试次随机顺序，便于复现
+    python run.py --check-only          只校验配置，不弹窗口
+    python run.py --id T001             正式施测
+    python run.py --id T001 --seed 42   固定试次顺序，便于复现
 
-设计原则：
-    1. 实验内容全部来自 config.yaml，代码里不出现任何具体词语
-    2. 配置有问题就在启动时停下并说明原因，不带着错误跑完 200 试次
-    3. 检查模式不依赖 PsychoPy，可以在没装图形库的机器上做配置校验
+实验内容全部来自 config.yaml。配置文件见 README。
 """
 
 import argparse
@@ -25,7 +19,8 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 试次类型：1/2 为两个概念，3/4 为两个属性
+__version__ = '2.1.0'
+
 T_CONCEPT_1, T_CONCEPT_2, T_ATTR_1, T_ATTR_2 = 1, 2, 3, 4
 TYPE_NAMES = {T_CONCEPT_1: 'concept_1', T_CONCEPT_2: 'concept_2',
               T_ATTR_1: 'attribute_1', T_ATTR_2: 'attribute_2'}
@@ -35,19 +30,12 @@ SIDES = ('left', 'right')
 # 区块序号的中文写法，供 {SECTION} 占位符使用
 NUM_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-# 中文字体候选（按优先级）
 CJK_FONTS_WIN = [('Microsoft YaHei', ('msyh.ttc', 'msyhbd.ttc')),
                  ('SimHei', ('simhei.ttf',))]
 CJK_FONTS_MAC = [('PingFang SC', '/System/Library/Fonts/PingFang.ttc'),
                  ('Hiragino Sans GB', '/System/Library/Fonts/Hiragino Sans GB.ttc')]
 
 
-# ---------------------------------------------------------------------------
-# 区块布局
-#   plan : [(试次类型, 该类型试次数), ...]
-#   phase: first = 概念处于初始侧；second = 概念左右互换侧
-#   score: 是否进入 D 分数计算
-# ---------------------------------------------------------------------------
 LAYOUTS = {
     'nosek7': [
         dict(no=1, kind='concept', phase='first', instr='b1', score=False,
@@ -99,9 +87,6 @@ LAYOUTS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# 配置读取与校验
-# ---------------------------------------------------------------------------
 def load_config(path):
     try:
         import yaml
@@ -109,7 +94,6 @@ def load_config(path):
         sys.exit("缺少 PyYAML。请先运行：\n    python -m pip install pyyaml")
     if not os.path.exists(path):
         sys.exit("找不到配置文件：%s" % path)
-    # utf-8-sig 兼容两种情况：记事本保存时可能加上 BOM，也可能不加
     with open(path, 'r', encoding='utf-8-sig') as f:
         cfg = yaml.safe_load(f)
     if not isinstance(cfg, dict):
@@ -172,7 +156,6 @@ def validate(cfg):
     if attributes[0]['side'] == attributes[1]['side']:
         errs.append("两个属性词必须在不同侧（现在都在 %s 侧）" % attributes[0]['side'])
 
-    # 每个概念的侧必须与某个属性相同，否则不存在相容配对
     attr_sides = {a['side'] for a in attributes}
     for c in concepts:
         if c['side'] not in attr_sides:
@@ -234,7 +217,6 @@ def validate(cfg):
             errs.append("error_handling 区块 %d 只能是 correct 或 advance，当前为 %r"
                         % (num, v))
 
-    # 类别名不能与刺激词重名，否则指导语与试次判断会混淆
     names = {c.get('name') for c in concepts} | {a.get('name') for a in attributes}
     if len(names) != 4:
         errs.append("概念词与属性词的名字必须两两不同（现在有重名）")
@@ -248,9 +230,6 @@ def validate(cfg):
     return errs
 
 
-# ---------------------------------------------------------------------------
-# 被试编号
-# ---------------------------------------------------------------------------
 class BadCode(Exception):
     pass
 
@@ -269,9 +248,6 @@ def parse_code(code):
     return order, '%s%s' % (order, m.group(2))
 
 
-# ---------------------------------------------------------------------------
-# 试次构建
-# ---------------------------------------------------------------------------
 def _concept_sides(cfg, order, phase):
     """返回 {试次类型: 该区块内所处的侧}。"""
     first = cfg['concepts'][0]['side'] if order == 'T' else _flip(cfg['concepts'][0]['side'])
@@ -332,7 +308,6 @@ def build_blocks(cfg, order, rng):
                 trials.append(dict(type=ttype, word=word, side=sides[ttype]))
         rng.shuffle(trials)
 
-        # 配对属性：概念之间的相容关系由"概念1 与 属性1 是否同侧"决定
         if spec['kind'] == 'combined':
             pairing = 'compatible' if c_sides[T_CONCEPT_1] == a_sides[T_ATTR_1] else 'incompatible'
         else:
@@ -368,9 +343,6 @@ def block_label_text(lab):
     return " 或 ".join(left), " 或 ".join(right)
 
 
-# ---------------------------------------------------------------------------
-# 检查模式（不依赖 PsychoPy）
-# ---------------------------------------------------------------------------
 def run_check(cfg, order):
     keys = cfg['keys']
     blocks = build_blocks(cfg, order, random.Random(0))
@@ -443,9 +415,6 @@ def run_check(cfg, order):
     return 0
 
 
-# ---------------------------------------------------------------------------
-# 正式施测（需要 PsychoPy）
-# ---------------------------------------------------------------------------
 def pick_cjk_font(preferred):
     if preferred and str(preferred).lower() != 'auto':
         return str(preferred)
@@ -540,11 +509,9 @@ def run_experiment(cfg, code, order, seed):
     writer.writeheader()
     fh.flush()
 
-    # ---------------- 知情同意 ----------------
     consent_min = float(timing.get('consent_min_time', 3.0) or 0)
     instr_min = float(timing.get('instruction_min_time', 1.5) or 0)
 
-    # 答错处理方式：correct = 显示红 X 并强制改正；advance = 直接进入下一试次
     eh_raw = cfg.get('error_handling') or {}
     err_default = str(eh_raw.get('default', 'correct')).lower()
     err_modes = {}
@@ -576,7 +543,6 @@ def run_experiment(cfg, code, order, seed):
         for block in blocks:
             lab = block_labels(cfg, block)
             ltxt, rtxt = block_label_text(lab)
-            # 答错规则由程序按本区块的实际设置生成，避免指导语和真实行为脱节
             err_mode = err_modes.get(block['no'], err_default)
             error_rule = ('如果按错，屏幕下方会出现红叉，按对才能继续。'
                           if err_mode == 'correct'
@@ -586,7 +552,6 @@ def run_experiment(cfg, code, order, seed):
                        ERROR_RULE=error_rule,
                        SECTION=NUM_CN[no - 1] if 1 <= no <= len(NUM_CN) else str(no))
             try:
-                # 七个说明页共用一段正文，改 instruction_common 即可全部同步
                 fmt['COMMON'] = str(instr.get('instruction_common') or '').format(**fmt)
                 body = instr[block['instr']].format(**fmt)
             except (KeyError, IndexError, ValueError) as e:
@@ -597,16 +562,14 @@ def run_experiment(cfg, code, order, seed):
                     % (block['instr'], e))
 
             instr_stim = text(body, height=0.048)
-            instr_stim.setAutoDraw(True)   # 同上：不能用 draw()
+            instr_stim.setAutoDraw(True)
             win.flip()
-            wait_keys((kl, kr), min_time=instr_min)   # 说明页用 E/I 继续
+            wait_keys((kl, kr), min_time=instr_min)
             instr_stim.setAutoDraw(False)
 
             GREEN = [0, 1, 0]
             combined = (block['kind'] == 'combined')
-            # 概念标签（白）：单独出现时居上；联合区块时占上方一行
             cl_y = 0.85
-            # 属性标签（绿）：单独出现时也居上，便于阅读；联合区块时占下方一行
             at_y = 0.55 if combined else 0.85
 
             side_labels = []
@@ -623,7 +586,6 @@ def run_experiment(cfg, code, order, seed):
             stim = text("", height=0.13)
             mark = text("X", height=0.2, color=[1, 0.2, 0.2], pos=(0, -0.45))
 
-            # ---------------- 逐试次 ----------------
             for i, trial in enumerate(block['trials'], start=1):
                 stim.text = trial['word']
                 correct_key = kl if trial['side'] == 'left' else kr
@@ -634,7 +596,6 @@ def run_experiment(cfg, code, order, seed):
                 mark.setAutoDraw(False)
                 win.flip()
 
-                # t=0 约等于标签出现的那一帧
                 clock = core.Clock()
                 event.clearEvents()
 
@@ -675,7 +636,7 @@ def run_experiment(cfg, code, order, seed):
                         if k == 'escape':
                             raise SystemExit("被试中止（Esc）")
                         if onset['t'] is None or kt < onset['t']:
-                            continue  # 刺激出现之前的按键不予采信
+                            continue
                         rt = kt - onset['t']
                         if first_key is None:
                             first_key = k
@@ -683,10 +644,9 @@ def run_experiment(cfg, code, order, seed):
                         if k == correct_key:
                             rt_correct = rt
                             done = True
-                            break  # 本帧后续按键不再计入错误
+                            break
                         n_err += 1
                         if err_mode == 'advance':
-                            # 不显示任何反馈，答错也直接进入下一试次
                             rt_correct = rt
                             done = True
                             break
@@ -694,7 +654,6 @@ def run_experiment(cfg, code, order, seed):
                     if done:
                         break
 
-                    # 2) 刺激还没出现：只推进帧，并记录这一帧的真实显示时刻
                     if onset['t'] is None:
                         if clock.getTime() >= stim_delay:
                             stim.setAutoDraw(True)
@@ -707,7 +666,6 @@ def run_experiment(cfg, code, order, seed):
                             win.flip()
                         continue
 
-                    # 3) 刺激已出现：显示红 X、检查超时
                     if mark_on:
                         mark.setAutoDraw(True)
                     if rt_timeout > 0 and (clock.getTime() - onset['t']) > rt_timeout:
@@ -743,13 +701,12 @@ def run_experiment(cfg, code, order, seed):
         if not fh.closed:
             fh.close()
 
-    # ---------------- 致谢 ----------------
     thanks_stim = text(instr['thanks'], height=0.06)
     thanks_stim.setAutoDraw(True)
     win.flip()
     core.wait(2.0)
     event.clearEvents()
-    wait_any_key(min_time=0.3)     # 文案写的是"按任意键"，就真的接受任意键
+    wait_any_key(min_time=0.3)
     thanks_stim.setAutoDraw(False)
     win.flip()
     win.close()
@@ -758,13 +715,8 @@ def run_experiment(cfg, code, order, seed):
     return 0
 
 
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 def ask_participant_code():
-    """询问被试编号。优先用图形输入框；图形库不可用时退回命令行输入。
-
-    返回 (order, code)；用户取消返回 (None, None)。
-    """
+    """返回 (order, code)；用户取消返回 (None, None)。"""
     try:
         from psychopy import gui
         for attempt in range(3):
@@ -801,8 +753,6 @@ def ask_participant_code():
 
 
 def main():
-    # 中文 Windows 的控制台默认是 GBK，遇到 GBK 无法表示的字符会直接抛
-    # UnicodeEncodeError 把程序打断。这里退化为替换字符，绝不因输出而崩溃。
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(errors='replace')
