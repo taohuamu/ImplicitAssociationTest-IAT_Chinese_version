@@ -566,7 +566,7 @@ def run_experiment(cfg, code, order, seed):
                 "知情同意书 instructions.consent 里的占位符有误（%s）。\n"
                 "可用的占位符只有 {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % e)
 
-        consent_stim = text(consent_body, height=0.036)
+        consent_stim = text(consent_body, height=0.042)
         # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
         consent_stim.setAutoDraw(True)
         win.flip()
