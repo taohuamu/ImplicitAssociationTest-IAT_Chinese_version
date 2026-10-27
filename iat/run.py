@@ -165,10 +165,10 @@ def validate(cfg):
         if not instr.get(key):
             errs.append("instructions.%s 缺失或为空" % key)
 
-    # 区块指导语会被 .format() 填充，花括号写错要到正式施测才炸，
-    # 所以在这里先用假值试一遍，提前发现
-    for spec in LAYOUTS[layout]:
-        key = spec['instr']
+    # 指导语会被 .format() 填充，花括号写错要到正式施测才炸，
+    # 所以在这里先用假值试一遍，提前发现。同意页与致谢页同样要检查——
+    # 同意页漏做替换时被试会直接看到 {KEY_L} 这样的原始占位符。
+    for key in ['consent', 'thanks'] + [spec['instr'] for spec in LAYOUTS[layout]]:
         tpl = instr.get(key)
         if not isinstance(tpl, str):
             continue
@@ -533,7 +533,16 @@ def run_experiment(cfg, code, order, seed):
             pass
 
     try:
-        consent_stim = text(instr['consent'], height=0.032)
+        # 同意页同样要替换占位符，否则被试会看到字面的 {KEY_L} {KEY_R}
+        try:
+            consent_body = instr['consent'].format(
+                L='左侧', R='右侧', KEY_L=kl.upper(), KEY_R=kr.upper())
+        except (KeyError, IndexError, ValueError) as e:
+            raise SystemExit(
+                "知情同意书 instructions.consent 里的占位符有误（%s）。\n"
+                "可用的占位符只有 {KEY_L} {KEY_R}；正文里要显示花括号请写成 {{ }}。" % e)
+
+        consent_stim = text(consent_body, height=0.032)
         # 必须用 autoDraw：只 draw() 的话文字只出现一帧，之后屏幕就黑了
         consent_stim.setAutoDraw(True)
         win.flip()
