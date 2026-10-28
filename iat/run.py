@@ -160,7 +160,7 @@ def validate(cfg):
     for c in concepts:
         if c['side'] not in attr_sides:
             errs.append(
-                "概念「%s」在 %s 侧，但没有属性也在这一侧，构不成相容配对。"
+                "概念“%s”在 %s 侧，但没有属性也在这一侧，构不成相容配对。"
                 "请检查 concepts 与 attributes 的 side 设置。"
                 % (c['name'], '左' if c['side'] == 'left' else '右'))
 
@@ -171,7 +171,7 @@ def validate(cfg):
             errs.append("instructions.%s 缺失或为空" % key)
 
     # 指导语会被 .format() 填充，花括号写错要到正式施测才炸，
-    # 所以在这里先用假值试一遍，提前发现。同意页与致谢页同样要检查——
+    # 所以在这里先用假值试一遍，提前发现。同意页与致谢页同样要检查，
     # 同意页漏做替换时被试会直接看到 {KEY_L} 这样的原始占位符。
     for key in ['consent', 'thanks', 'instruction_common'] + [spec['instr'] for spec in LAYOUTS[layout]]:
         tpl = instr.get(key)
@@ -403,7 +403,7 @@ def run_check(cfg, order):
     for b in blocks:
         mode = eh_map.get(b['no'], eh_default)
         desc = '显示红 X，必须按对键才能继续' if mode == 'correct' else '不显示反馈，答错直接进入下一试次'
-        print("  区块 %d：%s —— %s" % (b['no'], mode, desc))
+        print("  区块 %d：%s，%s" % (b['no'], mode, desc))
 
     print()
     print("计分区块配对：")
@@ -599,8 +599,8 @@ def run_experiment(cfg, code, order, seed):
                 clock = core.Clock()
                 event.clearEvents()
 
-                # 刺激"真正"出现于屏幕的时刻。不用标称的 stim_delay——那会带来
-                # 系统偏差；也不用翻转回调——回调在 flip 返回后才执行，会偏晚。
+                # 刺激"真正"出现于屏幕的时刻。不用标称的 stim_delay，那会带来
+                # 系统偏差；也不用翻转回调，回调在 flip 返回后才执行，会偏晚。
                 # win.flip() 返回 glFinish 记录的真实翻转时刻，但它与 core.getTime()
                 # 同一基准，而 Clock 的基准是绝对单调时钟，必须换算后再相减。
                 onset = {'t': None}

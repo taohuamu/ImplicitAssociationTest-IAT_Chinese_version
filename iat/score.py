@@ -5,7 +5,7 @@ IAT 计分（Greenwald, Nosek & Banaji, 2003, Table 4）。
     python score.py 某文件.csv
     python score.py --error-rate-exclude 0.2 --delete-below-400
 
-12 步算法与各参数含义见 README「计分算法」一节。
+12 步算法与各参数含义见 README 的计分算法一节。
 """
 import argparse
 import csv
