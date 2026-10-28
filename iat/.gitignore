@@ -1,0 +1,6 @@
+# 被试数据不入库
+*.csv
+*.json
+!config.yaml
+__pycache__/
+*.pyc
